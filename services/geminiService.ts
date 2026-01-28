@@ -2,9 +2,12 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserData, Quest, Difficulty } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Removed global initialization to ensure the latest API key is used for each request.
 
 export const generateDailyQuests = async (userData: UserData): Promise<Quest[]> => {
+  // Fix: Move GoogleGenAI initialization inside the function to use the most up-to-date API key.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
   const prompt = `
     Analise os dados corporais: Gênero ${userData.gender}, Idade ${userData.age}, Peso ${userData.weight}kg, Altura ${userData.height}cm.
     Meta: ${userData.dailyGoal}. Dificuldade: ${userData.difficulty}.
@@ -26,8 +29,9 @@ export const generateDailyQuests = async (userData: UserData): Promise<Quest[]> 
     O tom deve ser autoritário e solene como em Solo Leveling.
   `;
 
+  // Fix: Use 'gemini-3-pro-preview' for complex reasoning tasks like fitness planning and XP scaling.
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3-pro-preview',
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -52,6 +56,7 @@ export const generateDailyQuests = async (userData: UserData): Promise<Quest[]> 
   });
 
   try {
+    // Fix: Access response.text as a property (not a method).
     const rawJson = response.text?.trim() ?? "[]";
     return JSON.parse(rawJson).map((q: any) => ({ ...q, completed: false }));
   } catch (error) {
@@ -61,7 +66,17 @@ export const generateDailyQuests = async (userData: UserData): Promise<Quest[]> 
 };
 
 export const analyzeBodyComposition = async (userData: UserData): Promise<string> => {
+    // Fix: Move GoogleGenAI initialization inside the function to use the most up-to-date API key.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
     const prompt = `Como o Sistema, analise o despertar de um caçador ${userData.gender}, ${userData.weight}kg, ${userData.height}cm, meta ${userData.dailyGoal} e dificuldade ${userData.difficulty}. Seja impactante.`;
-    const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
+    
+    // Fix: Use 'gemini-3-pro-preview' for impactful and personalized content generation.
+    const response = await ai.models.generateContent({ 
+      model: 'gemini-3-pro-preview', 
+      contents: prompt 
+    });
+    
+    // Fix: Access response.text as a property.
     return response.text ?? "O Sistema está processando...";
 };
