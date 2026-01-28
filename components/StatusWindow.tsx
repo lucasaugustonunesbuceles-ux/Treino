@@ -5,9 +5,10 @@ import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } fro
 
 interface Props {
   userData: UserData;
+  onEditDifficulty?: () => void;
 }
 
-const StatusWindow: React.FC<Props> = ({ userData }) => {
+const StatusWindow: React.FC<Props> = ({ userData, onEditDifficulty }) => {
   const chartData = [
     { subject: 'FOR', A: userData.stats.str, fullMark: 150 },
     { subject: 'AGI', A: userData.stats.agi, fullMark: 150 },
@@ -44,8 +45,14 @@ const StatusWindow: React.FC<Props> = ({ userData }) => {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-slate-900/40 p-3 border border-blue-900/20 rounded-sm">
-            <span className="text-slate-500 text-[10px] font-system uppercase block mb-1 tracking-tight">Dificuldade</span>
+        <div 
+          onClick={onEditDifficulty}
+          className="bg-slate-900/40 p-3 border border-blue-900/20 rounded-sm cursor-pointer hover:border-blue-500 transition-colors group"
+        >
+            <div className="flex justify-between items-start">
+                <span className="text-slate-500 text-[10px] font-system uppercase block mb-1 tracking-tight">Dificuldade</span>
+                <span className="text-blue-500 opacity-0 group-hover:opacity-100 text-[10px]">EDITAR</span>
+            </div>
             <span className={`text-lg font-system font-bold ${
                 userData.difficulty === Difficulty.HELL ? 'text-red-500 animate-pulse' : 
                 userData.difficulty === Difficulty.HARD ? 'text-orange-500' :

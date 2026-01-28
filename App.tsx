@@ -36,6 +36,7 @@ const App: React.FC = () => {
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [loadingQuests, setLoadingQuests] = useState(false);
   const [systemMessage, setSystemMessage] = useState<string>("");
+  const [showDifficultyModal, setShowDifficultyModal] = useState(false);
 
   useEffect(() => {
     if (userData) {
@@ -100,8 +101,7 @@ const App: React.FC = () => {
       let newLevel = prev.level;
       let newStats = { ...prev.stats };
 
-      // Progressão de atributos também escala levemente com XP ganho
-      const statGain = amount / 200; // Por exemplo, 150 XP dá 0.75 em STR
+      const statGain = amount / 200; 
       if (type === 'STR') newStats.str += statGain;
       if (type === 'AGI') newStats.agi += statGain;
       if (type === 'VIT') newStats.vit += statGain;
@@ -127,15 +127,24 @@ const App: React.FC = () => {
     });
   };
 
-  const handleResetQuests = async () => {
-    if (!userData) return;
+  const handleResetQuests = async (user = userData) => {
+    if (!user) return;
     setLoadingQuests(true);
     try {
-      const daily = await generateDailyQuests(userData);
+      const daily = await generateDailyQuests(user);
       setQuests(daily);
     } finally {
       setLoadingQuests(false);
     }
+  };
+
+  const handleChangeDifficulty = async (newDifficulty: Difficulty) => {
+    if (!userData) return;
+    const updatedUser = { ...userData, difficulty: newDifficulty };
+    setUserData(updatedUser);
+    setShowDifficultyModal(false);
+    setSystemMessage(`Dificuldade alterada para ${newDifficulty.toUpperCase()}. Novas missões serão geradas.`);
+    await handleResetQuests(updatedUser);
   };
 
   if (!userData) {
@@ -155,13 +164,15 @@ const App: React.FC = () => {
               <h1 className="text-3xl font-system font-bold text-blue-400 tracking-[0.2em] system-glow">
                 O SISTEMA
               </h1>
-              <span className={`px-2 py-0.5 text-[9px] font-system font-black border rounded uppercase ${
+              <button 
+                onClick={() => setShowDifficultyModal(true)}
+                className={`px-2 py-0.5 text-[9px] font-system font-black border rounded uppercase transition-all hover:scale-105 active:scale-95 ${
                 userData.difficulty === Difficulty.HELL ? 'border-red-500 text-red-500 shadow-[0_0_5px_red]' : 
                 userData.difficulty === Difficulty.HARD ? 'border-orange-500 text-orange-500' :
                 'border-blue-500 text-blue-500'
               }`}>
-                MODO: {userData.difficulty}
-              </span>
+                MODO: {userData.difficulty} ⚙️
+              </button>
             </div>
             <p className="text-slate-400 text-sm mt-1 uppercase tracking-widest font-medium">Hunter Rank: Ativo</p>
           </div>
@@ -189,14 +200,14 @@ const App: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1">
-            <StatusWindow userData={userData} />
+            <StatusWindow userData={userData} onEditDifficulty={() => setShowDifficultyModal(true)} />
           </div>
 
           <div className="lg:col-span-2">
             <DailyQuests 
               quests={quests} 
               onComplete={handleCompleteQuest} 
-              onRefresh={handleResetQuests}
+              onRefresh={() => handleResetQuests()}
               isLoading={loadingQuests}
             />
           </div>
@@ -205,6 +216,32 @@ const App: React.FC = () => {
 
       {showLevelUp && <LevelUpModal level={userData.level} onClose={() => setShowLevelUp(false)} />}
       
+      {showDifficultyModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-md">
+          <div className="system-bg system-border p-8 rounded-lg max-w-sm w-full space-y-6">
+            <h3 className="text-xl font-system font-bold text-blue-400 uppercase tracking-widest text-center">Alterar Dificuldade</h3>
+            <p className="text-slate-400 text-xs text-center font-mono">O Sistema recalibrará suas missões diárias com base na nova escolha.</p>
+            <div className="space-y-3">
+              {Object.values(Difficulty).map(d => (
+                <button 
+                  key={d} 
+                  onClick={() => handleChangeDifficulty(d)} 
+                  className={`w-full p-4 border text-left font-system text-xs transition-all hover:bg-blue-600/20 ${userData.difficulty === d ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-900 border-blue-900/40 text-slate-400'}`}
+                >
+                    {d.toUpperCase()} {d === Difficulty.HELL && " [AVISO: PENALIDADES SEVERAS]"}
+                </button>
+              ))}
+            </div>
+            <button 
+              onClick={() => setShowDifficultyModal(false)}
+              className="w-full py-3 text-slate-500 font-system text-[10px] uppercase hover:text-white transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="fixed bottom-0 left-0 w-full p-4 bg-slate-950/80 backdrop-blur-md border-t border-blue-900/50 md:hidden flex justify-around items-center z-50">
         <button className="text-blue-400 font-system text-[10px] uppercase hover:text-white transition-colors">Perfil</button>
         <div className="w-12 h-12 rounded-full border-2 border-blue-500 flex items-center justify-center -mt-8 bg-slate-900 shadow-lg shadow-blue-500/20">
