@@ -16,11 +16,11 @@ export enum Difficulty {
 }
 
 export interface UserStats {
-  str: number; // Força
-  agi: number; // Agilidade
-  vit: number; // Vitalidade
-  int: number; // Inteligência (Consistência)
-  sen: number; // Senso (Consciência corporal)
+  str: number;
+  agi: number;
+  vit: number;
+  int: number;
+  sen: number;
 }
 
 export interface UserData {
@@ -44,13 +44,8 @@ export interface Quest {
   description: string;
   reps: string;
   sets: string;
-  instructions: string; // Detalhes técnicos do exercício
+  instructions: string;
   xpReward: number;
   completed: boolean;
   type: 'STR' | 'AGI' | 'VIT';
-}
-
-export interface DailyQuests {
-  date: string;
-  quests: Quest[];
 }
