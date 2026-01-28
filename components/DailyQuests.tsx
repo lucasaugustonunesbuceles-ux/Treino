@@ -20,7 +20,14 @@ const DailyQuests: React.FC<Props> = ({ quests, onComplete, onRefresh, isLoading
       </div>
 
       {isLoading ? (
-        <div className="p-20 text-center font-system text-blue-400 animate-pulse">Sincronizando com o Sistema...</div>
+        <div className="p-20 text-center font-system text-blue-400 animate-pulse border border-blue-900/20 rounded-lg">
+          [SISTEMA]: ANALISANDO DADOS CORPORAIS...
+        </div>
+      ) : quests.length === 0 ? (
+        <div className="p-10 text-center font-system text-red-400 border border-red-900/20 rounded-lg bg-red-900/5">
+          [ERRO]: FALHA NA COMUNICAÇÃO COM O SISTEMA.
+          <button onClick={onRefresh} className="block mx-auto mt-4 text-[10px] underline hover:text-white">RECONECTAR</button>
+        </div>
       ) : (
         <div className="grid gap-4">
           {quests.map(q => (

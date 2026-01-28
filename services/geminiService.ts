@@ -39,37 +39,37 @@ const FALLBACK_QUESTS: Quest[] = [
 ];
 
 export const generateDailyQuests = async (userData: UserData): Promise<Quest[]> => {
-  if (!process.env.API_KEY) {
-    console.warn("API_KEY não encontrada. Usando missões de contingência.");
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === '') {
+    console.warn("API_KEY não configurada no ambiente. Usando missões padrão.");
     return FALLBACK_QUESTS;
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-  const prompt = `
-    Analise os dados corporais: Gênero ${userData.gender}, Idade ${userData.age}, Peso ${userData.weight}kg, Altura ${userData.height}cm.
-    Meta: ${userData.dailyGoal}. Dificuldade: ${userData.difficulty}.
-    
-    Como o "Sistema", gere 4 quests diárias personalizadas.
-    
-    REGRAS DE XP BASE (MODO NORMAL):
-    - AGI: 50 XP
-    - VIT: 100 XP
-    - STR: 150 XP
-
-    ESCALONAMENTO POR DIFICULDADE:
-    - Fácil: 0.7x XP e repetições reduzidas.
-    - Normal: 1.0x XP e repetições padrão.
-    - Difícil: 1.5x XP e repetições elevadas.
-    - Infernal: 2.5x XP e repetições extremas.
-
-    Retorne APENAS um JSON array de objetos seguindo o schema.
-    O tom deve ser autoritário e solene como em Solo Leveling.
-  `;
-
   try {
+    const ai = new GoogleGenAI({ apiKey });
+    const prompt = `
+      Analise os dados corporais: Gênero ${userData.gender}, Idade ${userData.age}, Peso ${userData.weight}kg, Altura ${userData.height}cm.
+      Meta: ${userData.dailyGoal}. Dificuldade: ${userData.difficulty}.
+      
+      Como o "Sistema" de Solo Leveling, gere 4 quests diárias personalizadas de exercícios físicos reais.
+      
+      REGRAS DE XP BASE (MODO NORMAL):
+      - AGI: 50 XP
+      - VIT: 100 XP
+      - STR: 150 XP
+
+      ESCALONAMENTO POR DIFICULDADE:
+      - Fácil: 0.7x XP e repetições reduzidas.
+      - Normal: 1.0x XP e repetições padrão.
+      - Difícil: 1.5x XP e repetições elevadas.
+      - Infernal: 2.5x XP e repetições extremas.
+
+      Retorne APENAS um JSON array de objetos seguindo o schema.
+      O tom deve ser autoritário e solene.
+    `;
+
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -93,28 +93,29 @@ export const generateDailyQuests = async (userData: UserData): Promise<Quest[]> 
       }
     });
 
-    const rawJson = response.text?.trim();
-    if (!rawJson) throw new Error("Resposta vazia da IA");
+    const text = response.text;
+    if (!text) throw new Error("Sistema falhou ao retornar dados.");
     
-    return JSON.parse(rawJson).map((q: any) => ({ ...q, completed: false }));
+    return JSON.parse(text).map((q: any) => ({ ...q, completed: false }));
   } catch (error) {
-    console.error("Erro ao gerar missões via Gemini:", error);
+    console.error("Erro crítico do Sistema:", error);
     return FALLBACK_QUESTS;
   }
 };
 
 export const analyzeBodyComposition = async (userData: UserData): Promise<string> => {
-    if (!process.env.API_KEY) return "O Sistema iniciou em modo offline. O mundo ainda aguarda seu despertar.";
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) return "O Sistema iniciou em modo offline. O despertar foi concluído com sucesso.";
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const prompt = `Como o Sistema de Solo Leveling, faça uma análise curta e impactante do despertar deste caçador: ${userData.gender}, ${userData.weight}kg, ${userData.height}cm, dificuldade ${userData.difficulty}.`;
-    
     try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `Como o Sistema de Solo Leveling, faça uma análise curta (máximo 2 frases) e impactante do despertar deste caçador: ${userData.gender}, ${userData.weight}kg, ${userData.height}cm, meta ${userData.dailyGoal}.`;
+      
       const response = await ai.models.generateContent({ 
-        model: 'gemini-3-pro-preview', 
+        model: 'gemini-3-flash-preview', 
         contents: prompt 
       });
-      return response.text ?? "O Sistema está processando seu potencial...";
+      return response.text ?? "Seu potencial é vasto. Comece o treinamento imediatamente.";
     } catch (e) {
       return "Sua jornada rumo ao topo começa agora. Não vacile diante das provações.";
     }
