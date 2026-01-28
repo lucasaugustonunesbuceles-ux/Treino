@@ -1,0 +1,7 @@
+{
+  "name": "System: Solo Leveling Fitness",
+  "description": "A gamified fitness experience inspired by Solo Leveling. Complete daily quests, level up your stats, and rise through the ranks from E-Class to S-Class.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
