@@ -68,19 +68,21 @@ const App: React.FC = () => {
       isAwakened: true
     };
     
+    // Define o usuário imediatamente para carregar a UI principal
+    setUserData(newUser);
+    setIsAwakening(false);
+
     try {
-      const analysis = await analyzeBodyComposition(newUser);
-      setSystemMessage(analysis);
-      setUserData(newUser);
+      // Tenta análise de IA mas não trava o processo
+      analyzeBodyComposition(newUser).then(msg => setSystemMessage(msg));
       
+      // Carrega as missões (usará fallback se falhar)
       const daily = await generateDailyQuests(newUser);
       setQuests(daily);
     } catch (error) {
-      console.error("Error during awakening:", error);
-      setUserData(newUser); 
+      console.error("Error during awakening setup:", error);
     } finally {
       setLoadingQuests(false);
-      setIsAwakening(false);
     }
   };
 
@@ -143,7 +145,7 @@ const App: React.FC = () => {
     const updatedUser = { ...userData, difficulty: newDifficulty };
     setUserData(updatedUser);
     setShowDifficultyModal(false);
-    setSystemMessage(`Dificuldade alterada para ${newDifficulty.toUpperCase()}. Novas missões serão geradas.`);
+    setSystemMessage(`[SISTEMA]: DIFICULDADE ATUALIZADA.`);
     await handleResetQuests(updatedUser);
   };
 
@@ -171,7 +173,7 @@ const App: React.FC = () => {
                 userData.difficulty === Difficulty.HARD ? 'border-orange-500 text-orange-500' :
                 'border-blue-500 text-blue-500'
               }`}>
-                MODO: {userData.difficulty} ⚙️
+                MODO: {userData.difficulty}
               </button>
             </div>
             <p className="text-slate-400 text-sm mt-1 uppercase tracking-widest font-medium">Hunter Rank: Ativo</p>
@@ -220,7 +222,6 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-md">
           <div className="system-bg system-border p-8 rounded-lg max-w-sm w-full space-y-6">
             <h3 className="text-xl font-system font-bold text-blue-400 uppercase tracking-widest text-center">Alterar Dificuldade</h3>
-            <p className="text-slate-400 text-xs text-center font-mono">O Sistema recalibrará suas missões diárias com base na nova escolha.</p>
             <div className="space-y-3">
               {Object.values(Difficulty).map(d => (
                 <button 
@@ -228,7 +229,7 @@ const App: React.FC = () => {
                   onClick={() => handleChangeDifficulty(d)} 
                   className={`w-full p-4 border text-left font-system text-xs transition-all hover:bg-blue-600/20 ${userData.difficulty === d ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-900 border-blue-900/40 text-slate-400'}`}
                 >
-                    {d.toUpperCase()} {d === Difficulty.HELL && " [AVISO: PENALIDADES SEVERAS]"}
+                    {d.toUpperCase()}
                 </button>
               ))}
             </div>
@@ -241,14 +242,6 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
-
-      <div className="fixed bottom-0 left-0 w-full p-4 bg-slate-950/80 backdrop-blur-md border-t border-blue-900/50 md:hidden flex justify-around items-center z-50">
-        <button className="text-blue-400 font-system text-[10px] uppercase hover:text-white transition-colors">Perfil</button>
-        <div className="w-12 h-12 rounded-full border-2 border-blue-500 flex items-center justify-center -mt-8 bg-slate-900 shadow-lg shadow-blue-500/20">
-           <span className="text-white font-system font-bold">{userData.level}</span>
-        </div>
-        <button className="text-blue-400 font-system text-[10px] uppercase hover:text-white transition-colors">Quests</button>
-      </div>
     </div>
   );
 };
