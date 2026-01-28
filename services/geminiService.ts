@@ -2,10 +2,48 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserData, Quest, Difficulty } from "../types";
 
-// Removed global initialization to ensure the latest API key is used for each request.
+const FALLBACK_QUESTS: Quest[] = [
+  {
+    id: "fb-1",
+    title: "Flexões de Braço",
+    description: "Fortalecimento peitoral básico.",
+    reps: "20",
+    sets: "4",
+    instructions: "Mantenha o corpo reto e desça até quase tocar o chão. Expire ao subir.",
+    xpReward: 100,
+    type: 'STR',
+    completed: false
+  },
+  {
+    id: "fb-2",
+    title: "Agachamentos",
+    description: "Fortalecimento de membros inferiores.",
+    reps: "30",
+    sets: "3",
+    instructions: "Pés na largura dos ombros, desça como se fosse sentar em uma cadeira.",
+    xpReward: 80,
+    type: 'VIT',
+    completed: false
+  },
+  {
+    id: "fb-3",
+    title: "Abdominais",
+    description: "Fortalecimento do core.",
+    reps: "25",
+    sets: "4",
+    instructions: "Deitado, suba o tronco contraindo o abdômen. Não puxe o pescoço.",
+    xpReward: 90,
+    type: 'VIT',
+    completed: false
+  }
+];
 
 export const generateDailyQuests = async (userData: UserData): Promise<Quest[]> => {
-  // Fix: Move GoogleGenAI initialization inside the function to use the most up-to-date API key.
+  if (!process.env.API_KEY) {
+    console.warn("API_KEY não encontrada. Usando missões de contingência.");
+    return FALLBACK_QUESTS;
+  }
+
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const prompt = `
@@ -25,58 +63,59 @@ export const generateDailyQuests = async (userData: UserData): Promise<Quest[]> 
     - Difícil: 1.5x XP e repetições elevadas.
     - Infernal: 2.5x XP e repetições extremas.
 
-    Cada quest deve ter 'instructions' detalhando tecnicamente como fazer o exercício.
+    Retorne APENAS um JSON array de objetos seguindo o schema.
     O tom deve ser autoritário e solene como em Solo Leveling.
   `;
 
-  // Fix: Use 'gemini-3-pro-preview' for complex reasoning tasks like fitness planning and XP scaling.
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            title: { type: Type.STRING },
-            description: { type: Type.STRING },
-            reps: { type: Type.STRING },
-            sets: { type: Type.STRING },
-            instructions: { type: Type.STRING },
-            xpReward: { type: Type.NUMBER },
-            type: { type: Type.STRING }
-          },
-          required: ["id", "title", "description", "reps", "sets", "instructions", "xpReward", "type"]
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.STRING },
+              title: { type: Type.STRING },
+              description: { type: Type.STRING },
+              reps: { type: Type.STRING },
+              sets: { type: Type.STRING },
+              instructions: { type: Type.STRING },
+              xpReward: { type: Type.NUMBER },
+              type: { type: Type.STRING }
+            },
+            required: ["id", "title", "description", "reps", "sets", "instructions", "xpReward", "type"]
+          }
         }
       }
-    }
-  });
+    });
 
-  try {
-    // Fix: Access response.text as a property (not a method).
-    const rawJson = response.text?.trim() ?? "[]";
+    const rawJson = response.text?.trim();
+    if (!rawJson) throw new Error("Resposta vazia da IA");
+    
     return JSON.parse(rawJson).map((q: any) => ({ ...q, completed: false }));
   } catch (error) {
-    console.error("Gemini Parse Error", error);
-    return [];
+    console.error("Erro ao gerar missões via Gemini:", error);
+    return FALLBACK_QUESTS;
   }
 };
 
 export const analyzeBodyComposition = async (userData: UserData): Promise<string> => {
-    // Fix: Move GoogleGenAI initialization inside the function to use the most up-to-date API key.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    if (!process.env.API_KEY) return "O Sistema iniciou em modo offline. O mundo ainda aguarda seu despertar.";
 
-    const prompt = `Como o Sistema, analise o despertar de um caçador ${userData.gender}, ${userData.weight}kg, ${userData.height}cm, meta ${userData.dailyGoal} e dificuldade ${userData.difficulty}. Seja impactante.`;
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `Como o Sistema de Solo Leveling, faça uma análise curta e impactante do despertar deste caçador: ${userData.gender}, ${userData.weight}kg, ${userData.height}cm, dificuldade ${userData.difficulty}.`;
     
-    // Fix: Use 'gemini-3-pro-preview' for impactful and personalized content generation.
-    const response = await ai.models.generateContent({ 
-      model: 'gemini-3-pro-preview', 
-      contents: prompt 
-    });
-    
-    // Fix: Access response.text as a property.
-    return response.text ?? "O Sistema está processando...";
+    try {
+      const response = await ai.models.generateContent({ 
+        model: 'gemini-3-pro-preview', 
+        contents: prompt 
+      });
+      return response.text ?? "O Sistema está processando seu potencial...";
+    } catch (e) {
+      return "Sua jornada rumo ao topo começa agora. Não vacile diante das provações.";
+    }
 };
