@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { UserData, Rank, Quest, Difficulty, TrainingLocation, HealthTip, MartialDrill, MartialArt, MartialProgress } from './types.ts';
-import { generateDailyQuests, generateSurvivalGuide, generateMartialDrills } from './services/geminiService.ts';
-import SystemIntro from './components/SystemIntro.tsx';
-import OnboardingForm from './components/OnboardingForm.tsx';
-import StatusWindow from './components/StatusWindow.tsx';
-import DailyQuests from './components/DailyQuests.tsx';
-import LevelUpModal from './components/LevelUpModal.tsx';
+import { UserData, Rank, Quest, Difficulty, TrainingLocation, HealthTip, MartialDrill, MartialArt, MartialProgress } from './types';
+import { generateDailyQuests, generateSurvivalGuide, generateMartialDrills } from './services/geminiService';
+import SystemIntro from './components/SystemIntro';
+import OnboardingForm from './components/OnboardingForm';
+import StatusWindow from './components/StatusWindow';
+import DailyQuests from './components/DailyQuests';
+import LevelUpModal from './components/LevelUpModal';
 
 type ContentTab = 'QUESTS' | 'SURVIVAL';
 
@@ -16,10 +16,8 @@ const App: React.FC = () => {
       const saved = localStorage.getItem('solo_leveling_user');
       if (!saved) return null;
       const parsed = JSON.parse(saved);
-      // Validação básica para evitar crashes com dados antigos corrompidos
       return (parsed && parsed.name) ? parsed : null;
     } catch (e) {
-      console.error("Erro ao carregar dados do usuário", e);
       return null;
     }
   });
@@ -36,15 +34,13 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (userData && currentLocation) {
-      const timer = setTimeout(() => loadMainContent(), 500);
-      return () => clearTimeout(timer);
+      loadMainContent();
     }
   }, [currentLocation, activeTab, userData?.level]);
 
   useEffect(() => {
     if (userData && userData.martialArt !== MartialArt.NONE) {
-      const timer = setTimeout(() => loadDojoContent(), 3000);
-      return () => clearTimeout(timer);
+      loadDojoContent();
     }
   }, [userData?.martialArt, userData?.martialProgress[userData?.martialArt || MartialArt.NONE]?.level]);
 
@@ -59,8 +55,6 @@ const App: React.FC = () => {
         const tips = await generateSurvivalGuide(userData);
         setHealthTips(tips || []);
       }
-    } catch (err) {
-      console.error("Erro ao carregar conteúdo principal:", err);
     } finally {
       setLoading(false);
     }
@@ -68,12 +62,8 @@ const App: React.FC = () => {
 
   const loadDojoContent = async () => {
     if (!userData) return;
-    try {
-      const d = await generateMartialDrills(userData);
-      setDrills(d || []);
-    } catch (err) {
-      console.error("Erro ao carregar dojo:", err);
-    }
+    const d = await generateMartialDrills(userData);
+    setDrills(d || []);
   };
 
   const handleAwaken = (data: Partial<UserData>) => {
@@ -158,10 +148,10 @@ const App: React.FC = () => {
     return (
       <div className="fixed inset-0 bg-slate-950 flex items-center justify-center p-6 z-[400]">
         <div className="system-bg system-border p-8 rounded-lg max-w-lg w-full text-center space-y-10">
-          <h2 className="text-2xl font-system text-blue-400 uppercase tracking-widest system-glow">LOCAL DE TREINAMENTO</h2>
+          <h2 className="text-2xl font-system text-blue-400 uppercase tracking-widest system-glow">O SISTEMA EXIGE UM LOCAL</h2>
           <div className="grid grid-cols-1 gap-4">
             {Object.values(TrainingLocation).map(loc => (
-              <button key={loc} onClick={() => setCurrentLocation(loc)} className="p-4 border border-blue-900/40 hover:border-blue-500 rounded bg-slate-900/50 text-white font-system uppercase text-xs">
+              <button key={loc} onClick={() => setCurrentLocation(loc)} className="p-4 border border-blue-900/40 hover:border-blue-500 rounded bg-slate-900/50 text-white font-system uppercase text-xs transition-all">
                 {loc}
               </button>
             ))}
@@ -175,15 +165,20 @@ const App: React.FC = () => {
   const artXpPct = (artProg.xp / (artProg.level * 80)) * 100;
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col md:flex-row font-sans">
-      <aside className="w-full md:w-80 bg-slate-900/80 border-r border-blue-900/30 p-6 space-y-8 overflow-y-auto">
+    <div className="min-h-screen bg-slate-950 flex flex-col md:flex-row font-sans relative overflow-hidden">
+      {/* Background Effect */}
+      <div className="fixed inset-0 opacity-10 pointer-events-none">
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+      </div>
+
+      <aside className="w-full md:w-80 bg-slate-900/80 backdrop-blur-md border-r border-blue-900/30 p-6 space-y-8 overflow-y-auto relative z-10">
         <div className="border-b border-blue-900/50 pb-4">
             <h2 className="text-blue-400 font-system text-lg font-bold tracking-widest system-glow">SHADOW DOJO</h2>
         </div>
 
         {userData.martialArt !== MartialArt.NONE && (
             <div className="space-y-6">
-                <div className="p-4 bg-blue-900/10 border border-blue-500/20 rounded">
+                <div className="p-4 bg-blue-900/10 border border-blue-500/20 rounded relative overflow-hidden group">
                     <div className="flex justify-between items-end mb-2">
                         <span className="text-[10px] font-system text-blue-400 uppercase">{userData.martialArt}</span>
                         <span className="text-xl font-system text-white font-bold">NV. {artProg.level}</span>
@@ -194,26 +189,25 @@ const App: React.FC = () => {
                 </div>
                 <div className="space-y-3">
                     {drills.map((drill, i) => (
-                        <div key={i} className="p-3 rounded border border-blue-900/30 bg-blue-900/5">
-                            <h4 className="text-white font-system text-[9px] uppercase">{drill.title}</h4>
+                        <div key={i} className="p-3 rounded border border-blue-900/30 bg-blue-900/5 hover:border-blue-500/50 transition-colors">
+                            <h4 className="text-white font-system text-[9px] uppercase tracking-wider">{drill.title}</h4>
                             <p className="text-slate-400 text-[10px] leading-tight mt-1">{drill.description}</p>
                         </div>
                     ))}
-                    {drills.length === 0 && <p className="text-slate-600 text-[10px] uppercase font-system italic">Nenhum drill ativo...</p>}
                 </div>
             </div>
         )}
       </aside>
 
-      <main className="flex-1 p-6 md:p-10 space-y-8 overflow-y-auto pb-32">
+      <main className="flex-1 p-6 md:p-10 space-y-8 overflow-y-auto pb-32 relative z-10">
         <header className="flex flex-col md:flex-row justify-between items-end gap-4">
           <div>
             <h1 className="text-4xl font-system font-black text-blue-500 tracking-[0.2em] system-glow">O SISTEMA</h1>
-            <p className="text-slate-400 text-[10px] uppercase font-system mt-2">HUNTER NÍVEL {userData.level} | {currentLocation}</p>
+            <p className="text-slate-400 text-[10px] uppercase font-system mt-2 tracking-widest">HUNTER {userData.rank}-CLASS | NV. {userData.level}</p>
           </div>
-          <nav className="flex gap-4 bg-slate-900 p-1 rounded border border-blue-900/30">
-            <button onClick={() => setActiveTab('QUESTS')} className={`px-6 py-2 font-system text-[10px] uppercase ${activeTab === 'QUESTS' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>Treinamento</button>
-            <button onClick={() => setActiveTab('SURVIVAL')} className={`px-6 py-2 font-system text-[10px] uppercase ${activeTab === 'SURVIVAL' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>Saúde</button>
+          <nav className="flex gap-4 bg-slate-900 p-1 rounded border border-blue-900/30 shadow-2xl">
+            <button onClick={() => setActiveTab('QUESTS')} className={`px-6 py-2 font-system text-[10px] uppercase transition-all ${activeTab === 'QUESTS' ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-slate-300'}`}>Treinamento</button>
+            <button onClick={() => setActiveTab('SURVIVAL')} className={`px-6 py-2 font-system text-[10px] uppercase transition-all ${activeTab === 'SURVIVAL' ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-slate-300'}`}>Saúde</button>
           </nav>
         </header>
 
@@ -223,15 +217,17 @@ const App: React.FC = () => {
             </div>
             <div className="xl:col-span-2 space-y-6">
                 {loading ? (
-                    <div className="p-20 text-center font-system text-blue-400 animate-pulse">[ SINCRONIZANDO... ]</div>
+                    <div className="p-20 text-center font-system text-blue-400 animate-pulse bg-slate-900/20 rounded-lg border border-blue-900/20">
+                      [ SINCRONIZANDO COM O SISTEMA... ]
+                    </div>
                 ) : activeTab === 'QUESTS' ? (
                     <DailyQuests quests={quests} onComplete={handleCompleteQuest} onRefresh={() => loadMainContent()} isLoading={false} />
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {healthTips.map((tip, i) => (
-                            <div key={i} className="p-5 system-bg border border-blue-900/30 rounded-lg">
-                                <span className="text-[9px] font-system text-blue-400 uppercase">{tip.category}</span>
-                                <p className="text-sm text-slate-300 italic mt-2">"{tip.content}"</p>
+                            <div key={i} className="p-5 system-bg border border-blue-900/30 rounded-lg hover:border-blue-500/50 transition-all">
+                                <span className="text-[9px] font-system text-blue-400 uppercase tracking-widest">{tip.category}</span>
+                                <p className="text-sm text-slate-300 italic mt-2 leading-relaxed">"{tip.content}"</p>
                             </div>
                         ))}
                     </div>
