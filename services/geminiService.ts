@@ -40,12 +40,12 @@ export const generateDailyQuests = async (userData: UserData, location: Training
 
   return callGeminiWithRetry(async () => {
     const ai = new GoogleGenAI({ apiKey });
-    const prompt = `Hunter: ${userData.name}. Objetivo: ${userData.dailyGoal}. Arte: ${userData.martialArt}. Dungeon: ${location}. Gere 4 quests físicas.`;
+    const prompt = `Hunter: ${userData.name}. Objetivo: ${userData.dailyGoal}. Arte: ${userData.martialArt}. Dungeon: ${location}. Gere 4 quests físicas detalhadas.`;
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
-        systemInstruction: "Você é o Sistema. Gere quests de treino físico. Retorne APENAS um array JSON de objetos Quest.",
+        systemInstruction: "Você é o Sistema de Solo Leveling. Gere quests. Retorne APENAS um array JSON de objetos Quest.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -77,9 +77,9 @@ export const generateSurvivalGuide = async (userData: UserData): Promise<HealthT
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: `Dicas de saúde para ${userData.dailyGoal}.`,
+            contents: `Dicas de saúde e sobrevivência para Hunter com meta de ${userData.dailyGoal}.`,
             config: { 
-                systemInstruction: "Retorne APENAS array JSON {category, content, importance}.",
+                systemInstruction: "Você é o Guia de Sobrevivência do Sistema. Retorne APENAS array JSON {category, content, importance}.",
                 responseMimeType: "application/json" 
             }
         });
@@ -95,9 +95,9 @@ export const generateMartialDrills = async (userData: UserData): Promise<Martial
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: `Drills para ${userData.martialArt} nível ${level}.`,
+            contents: `Drills técnicos de ${userData.martialArt} para nível ${level}.`,
             config: { 
-                systemInstruction: "Retorne APENAS array JSON {title, description, reps, isPhysical}.",
+                systemInstruction: "Você é o Mestre das Sombras. Gere treinos marciais. Retorne APENAS array JSON {title, description, reps, isPhysical}.",
                 responseMimeType: "application/json" 
             }
         });

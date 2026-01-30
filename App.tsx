@@ -16,8 +16,10 @@ const App: React.FC = () => {
       const saved = localStorage.getItem('solo_leveling_user');
       if (!saved) return null;
       const parsed = JSON.parse(saved);
-      return (parsed && parsed.name) ? parsed : null;
+      // Validar estrutura básica para não quebrar após atualizações
+      return (parsed && parsed.name && parsed.stats) ? parsed : null;
     } catch (e) {
+      console.warn("[SISTEMA]: Falha ao ler dados de salvamento.", e);
       return null;
     }
   });
@@ -55,6 +57,8 @@ const App: React.FC = () => {
         const tips = await generateSurvivalGuide(userData);
         setHealthTips(tips || []);
       }
+    } catch (err) {
+      console.error("[SISTEMA]: Erro ao gerar conteúdo.", err);
     } finally {
       setLoading(false);
     }
@@ -62,8 +66,12 @@ const App: React.FC = () => {
 
   const loadDojoContent = async () => {
     if (!userData) return;
-    const d = await generateMartialDrills(userData);
-    setDrills(d || []);
+    try {
+      const d = await generateMartialDrills(userData);
+      setDrills(d || []);
+    } catch (err) {
+      console.error("[SISTEMA]: Falha na conexão com o Dojo.", err);
+    }
   };
 
   const handleAwaken = (data: Partial<UserData>) => {
@@ -72,7 +80,7 @@ const App: React.FC = () => {
       initialMartialProgress[art] = { level: 1, xp: 0 };
     });
 
-    const newUser = {
+    const newUser: UserData = {
       name: data.name || 'Hunter',
       age: data.age || 24,
       height: data.height || 175,
@@ -80,13 +88,15 @@ const App: React.FC = () => {
       gender: data.gender || 'Masculino',
       dailyGoal: data.dailyGoal || 'Saúde',
       difficulty: data.difficulty || Difficulty.NORMAL,
-      level: 1, xp: 0, rank: Rank.E,
+      level: 1,
+      xp: 0,
+      rank: Rank.E,
       stats: { str: 10, agi: 10, vit: 10, int: 10, sen: 10 },
       isAwakened: true,
       preferredLocation: TrainingLocation.HOME,
       martialArt: data.martialArt || MartialArt.NONE,
       martialProgress: initialMartialProgress
-    } as UserData;
+    };
     
     setUserData(newUser);
     localStorage.setItem('solo_leveling_user', JSON.stringify(newUser));
@@ -147,11 +157,11 @@ const App: React.FC = () => {
   if (!currentLocation) {
     return (
       <div className="fixed inset-0 bg-slate-950 flex items-center justify-center p-6 z-[400]">
-        <div className="system-bg system-border p-8 rounded-lg max-w-lg w-full text-center space-y-10">
+        <div className="bg-slate-900 border border-blue-900/40 p-8 rounded-lg max-w-lg w-full text-center space-y-10 shadow-2xl">
           <h2 className="text-2xl font-system text-blue-400 uppercase tracking-widest system-glow">O SISTEMA EXIGE UM LOCAL</h2>
           <div className="grid grid-cols-1 gap-4">
             {Object.values(TrainingLocation).map(loc => (
-              <button key={loc} onClick={() => setCurrentLocation(loc)} className="p-4 border border-blue-900/40 hover:border-blue-500 rounded bg-slate-900/50 text-white font-system uppercase text-xs transition-all">
+              <button key={loc} onClick={() => setCurrentLocation(loc)} className="p-4 border border-blue-900/40 hover:border-blue-500 rounded bg-slate-800 text-white font-system uppercase text-xs transition-all hover:scale-105 active:scale-95">
                 {loc}
               </button>
             ))}
@@ -165,13 +175,8 @@ const App: React.FC = () => {
   const artXpPct = (artProg.xp / (artProg.level * 80)) * 100;
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col md:flex-row font-sans relative overflow-hidden">
-      {/* Background Effect */}
-      <div className="fixed inset-0 opacity-10 pointer-events-none">
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
-      </div>
-
-      <aside className="w-full md:w-80 bg-slate-900/80 backdrop-blur-md border-r border-blue-900/30 p-6 space-y-8 overflow-y-auto relative z-10">
+    <div className="min-h-screen flex flex-col md:flex-row font-sans relative z-10">
+      <aside className="w-full md:w-80 bg-slate-900/60 backdrop-blur-xl border-r border-blue-900/30 p-6 space-y-8 overflow-y-auto">
         <div className="border-b border-blue-900/50 pb-4">
             <h2 className="text-blue-400 font-system text-lg font-bold tracking-widest system-glow">SHADOW DOJO</h2>
         </div>
@@ -194,12 +199,13 @@ const App: React.FC = () => {
                             <p className="text-slate-400 text-[10px] leading-tight mt-1">{drill.description}</p>
                         </div>
                     ))}
+                    {drills.length === 0 && <p className="text-slate-600 text-[10px] uppercase font-system italic">Carregando treinos marciais...</p>}
                 </div>
             </div>
         )}
       </aside>
 
-      <main className="flex-1 p-6 md:p-10 space-y-8 overflow-y-auto pb-32 relative z-10">
+      <main className="flex-1 p-6 md:p-10 space-y-8 overflow-y-auto pb-32">
         <header className="flex flex-col md:flex-row justify-between items-end gap-4">
           <div>
             <h1 className="text-4xl font-system font-black text-blue-500 tracking-[0.2em] system-glow">O SISTEMA</h1>
@@ -217,7 +223,7 @@ const App: React.FC = () => {
             </div>
             <div className="xl:col-span-2 space-y-6">
                 {loading ? (
-                    <div className="p-20 text-center font-system text-blue-400 animate-pulse bg-slate-900/20 rounded-lg border border-blue-900/20">
+                    <div className="p-20 text-center font-system text-blue-400 animate-pulse bg-slate-900/40 rounded-lg border border-blue-900/20 shadow-inner">
                       [ SINCRONIZANDO COM O SISTEMA... ]
                     </div>
                 ) : activeTab === 'QUESTS' ? (
@@ -225,7 +231,7 @@ const App: React.FC = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {healthTips.map((tip, i) => (
-                            <div key={i} className="p-5 system-bg border border-blue-900/30 rounded-lg hover:border-blue-500/50 transition-all">
+                            <div key={i} className="p-5 bg-slate-900/60 backdrop-blur border border-blue-900/30 rounded-lg hover:border-blue-500/50 transition-all">
                                 <span className="text-[9px] font-system text-blue-400 uppercase tracking-widest">{tip.category}</span>
                                 <p className="text-sm text-slate-300 italic mt-2 leading-relaxed">"{tip.content}"</p>
                             </div>
