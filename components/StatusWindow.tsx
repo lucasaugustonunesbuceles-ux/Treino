@@ -53,7 +53,7 @@ const StatusWindow: React.FC<Props> = ({ userData, onEditDifficulty }) => {
                 <span className="text-slate-500 text-[10px] font-system uppercase block mb-1 tracking-tight">Dificuldade</span>
                 <span className="text-blue-500 opacity-0 group-hover:opacity-100 text-[10px]">EDITAR</span>
             </div>
-            <span className={`text-lg font-system font-bold ${
+            <span className={`text-sm font-system font-bold ${
                 userData.difficulty === Difficulty.HELL ? 'text-red-500 animate-pulse' : 
                 userData.difficulty === Difficulty.HARD ? 'text-orange-500' :
                 'text-white'
@@ -61,7 +61,7 @@ const StatusWindow: React.FC<Props> = ({ userData, onEditDifficulty }) => {
         </div>
         <div className="bg-slate-900/40 p-3 border border-blue-900/20 rounded-sm">
             <span className="text-slate-500 text-[10px] font-system uppercase block mb-1 tracking-tight">Títulos</span>
-            <span className="text-lg font-system text-blue-400 font-medium">CALOURO</span>
+            <span className="text-sm font-system text-blue-400 font-medium">{userData.rank}-CLASS</span>
         </div>
       </div>
 
@@ -84,8 +84,8 @@ const StatusWindow: React.FC<Props> = ({ userData, onEditDifficulty }) => {
       <div className="space-y-3 pt-4 border-t border-blue-900/50">
          <h4 className="text-blue-500 font-system text-[10px] font-bold uppercase tracking-widest">Habilidades Ativas</h4>
          <div className="flex flex-wrap gap-2">
-            <span className="px-2 py-1 bg-blue-900/20 text-blue-400 text-[10px] font-system font-bold rounded border border-blue-800/50">RESILIÊNCIA Lvl {userData.level}</span>
-            <span className="px-2 py-1 bg-slate-800/50 text-slate-500 text-[10px] font-system rounded border border-slate-700 opacity-40">BLOQUEADO</span>
+            <span className="px-2 py-1 bg-blue-900/20 text-blue-400 text-[10px] font-system font-bold rounded border border-blue-800/50 uppercase">Resiliência {userData.level >= 50 ? 'II' : 'I'}</span>
+            {userData.rank === 'S' && <span className="px-2 py-1 bg-purple-900/20 text-purple-400 text-[10px] font-system font-bold rounded border border-purple-800/50 uppercase">Autoridade do Monarca</span>}
          </div>
       </div>
     </div>

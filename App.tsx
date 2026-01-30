@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { UserData, Rank, Quest, Difficulty, TrainingLocation, HealthTip, MartialDrill, MartialArt, MartialProgress } from './types';
 import { generateDailyQuests, generateSurvivalGuide, generateMartialDrills } from './services/geminiService';
 import SystemIntro from './components/SystemIntro';
@@ -17,16 +17,6 @@ const App: React.FC = () => {
       if (!saved) return null;
       const parsed = JSON.parse(saved);
       if (!parsed || !parsed.name) return null;
-
-      // Assegurar campos de artes marciais
-      if (!parsed.martialProgress) {
-        const initial: any = {};
-        Object.values(MartialArt).forEach(art => { initial[art] = { level: 1, xp: 0 }; });
-        parsed.martialProgress = initial;
-      }
-      if (!parsed.martialArt) parsed.martialArt = MartialArt.NONE;
-      if (!parsed.preferredLocation) parsed.preferredLocation = TrainingLocation.HOME;
-
       return parsed as UserData;
     } catch (e) { return null; }
   });
@@ -38,49 +28,72 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isAwakening, setIsAwakening] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
+  const [showDifficultyModal, setShowDifficultyModal] = useState(false);
   const [levelUpData, setLevelUpData] = useState({ level: 1, type: 'HUNTER' as 'HUNTER' | 'MARTIAL', name: '' });
 
-  // Carregamento de conteúdo principal
-  useEffect(() => {
-    if (userData?.preferredLocation) {
-      loadMainContent();
-    }
-  }, [userData?.preferredLocation, activeTab, userData?.level]);
+  // Função de Cache para evitar lentidão
+  const getCachedData = (key: string) => {
+    const cached = localStorage.getItem(`cache_${key}`);
+    if (cached) return JSON.parse(cached);
+    return null;
+  };
 
-  // Carregamento de Dojo
-  useEffect(() => {
-    if (userData && userData.martialArt !== MartialArt.NONE) {
-      loadDojoContent();
-    }
-  }, [userData?.martialArt, userData?.martialProgress?.[userData.martialArt]?.level]);
+  const setCachedData = (key: string, data: any) => {
+    localStorage.setItem(`cache_${key}`, JSON.stringify(data));
+  };
 
-  const loadMainContent = async () => {
+  const loadMainContent = useCallback(async (forceRefresh = false) => {
     if (!userData || !userData.preferredLocation) return;
+    
+    const cacheKey = `${activeTab}_${userData.preferredLocation}_${userData.difficulty}`;
+    const cached = getCachedData(cacheKey);
+
+    if (cached && !forceRefresh) {
+      if (activeTab === 'QUESTS') setQuests(cached);
+      else setHealthTips(cached);
+      return;
+    }
+
     setLoading(true);
     try {
       if (activeTab === 'QUESTS') {
         const q = await generateDailyQuests(userData, userData.preferredLocation);
         setQuests(q || []);
+        setCachedData(cacheKey, q);
       } else {
         const tips = await generateSurvivalGuide(userData);
         setHealthTips(tips || []);
+        setCachedData(cacheKey, tips);
       }
     } catch (err) {
-      console.error("[SISTEMA]: Erro no Grande Portão.");
+      console.error("[SISTEMA]: Erro de rede.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [userData?.preferredLocation, userData?.difficulty, activeTab]);
 
-  const loadDojoContent = async () => {
-    if (!userData) return;
+  const loadDojoContent = useCallback(async (forceRefresh = false) => {
+    if (!userData || userData.martialArt === MartialArt.NONE) return;
+    
+    const cacheKey = `drills_${userData.martialArt}`;
+    const cached = getCachedData(cacheKey);
+
+    if (cached && !forceRefresh) {
+      setDrills(cached);
+      return;
+    }
+
     try {
       const d = await generateMartialDrills(userData);
       setDrills(d || []);
+      setCachedData(cacheKey, d);
     } catch (err) {
-      console.error("[SISTEMA]: Falha no Dojo.");
+      console.error("[SISTEMA]: Erro no Dojo.");
     }
-  };
+  }, [userData?.martialArt]);
+
+  useEffect(() => { loadMainContent(); }, [loadMainContent]);
+  useEffect(() => { loadDojoContent(); }, [loadDojoContent]);
 
   const handleUpdateLocation = (loc: TrainingLocation) => {
     setUserData(prev => {
@@ -89,6 +102,16 @@ const App: React.FC = () => {
       localStorage.setItem('solo_leveling_user', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const handleUpdateDifficulty = (diff: Difficulty) => {
+    setUserData(prev => {
+      if (!prev) return null;
+      const updated = { ...prev, difficulty: diff };
+      localStorage.setItem('solo_leveling_user', JSON.stringify(updated));
+      return updated;
+    });
+    setShowDifficultyModal(false);
   };
 
   const handleUpdateMartialArt = (art: MartialArt) => {
@@ -128,10 +151,13 @@ const App: React.FC = () => {
   };
 
   const handleCompleteQuest = (questId: string) => {
-    const quest = quests.find(q => q.id === questId);
-    if (!quest || quest.completed) return;
-    setQuests(prev => prev.map(q => q.id === questId ? { ...q, completed: true } : q));
-    handleGainXp(quest.xpReward, quest.type);
+    setQuests(prev => prev.map(q => {
+      if (q.id === questId && !q.completed) {
+        handleGainXp(q.xpReward, q.type);
+        return { ...q, completed: true };
+      }
+      return q;
+    }));
   };
 
   const handleGainXp = (amount: number, statType: string) => {
@@ -140,19 +166,27 @@ const App: React.FC = () => {
       let updatedUser = { ...prev };
       
       updatedUser.xp += amount;
-      if (updatedUser.xp >= updatedUser.level * 100) {
-        updatedUser.xp -= updatedUser.level * 100;
+      const xpReq = updatedUser.level * 100;
+      if (updatedUser.xp >= xpReq) {
+        updatedUser.xp -= xpReq;
         updatedUser.level += 1;
         setLevelUpData({ level: updatedUser.level, type: 'HUNTER', name: '' });
         setShowLevelUp(true);
+        // Atualiza Rank baseado no nível
+        if (updatedUser.level >= 10) updatedUser.rank = Rank.D;
+        if (updatedUser.level >= 30) updatedUser.rank = Rank.C;
+        if (updatedUser.level >= 50) updatedUser.rank = Rank.B;
+        if (updatedUser.level >= 80) updatedUser.rank = Rank.A;
+        if (updatedUser.level >= 100) updatedUser.rank = Rank.S;
       }
 
       if (updatedUser.martialArt !== MartialArt.NONE) {
         const art = updatedUser.martialArt;
         const prog = { ...(updatedUser.martialProgress[art] || { level: 1, xp: 0 }) };
         prog.xp += amount;
-        if (prog.xp >= prog.level * 80) {
-          prog.xp -= prog.level * 80;
+        const artXpReq = prog.level * 80;
+        if (prog.xp >= artXpReq) {
+          prog.xp -= artXpReq;
           prog.level += 1;
           setLevelUpData({ level: prog.level, type: 'MARTIAL', name: art });
           setShowLevelUp(true);
@@ -186,7 +220,7 @@ const App: React.FC = () => {
 
         {userData.martialArt === MartialArt.NONE ? (
           <div className="p-4 bg-slate-950 border border-dashed border-blue-900/50 rounded text-center space-y-4">
-            <p className="text-[10px] font-system text-slate-500 uppercase">Nenhum estilo de combate detectado.</p>
+            <p className="text-[10px] font-system text-slate-500 uppercase">Estilo de Combate não despertado.</p>
             <div className="grid grid-cols-1 gap-2">
               {Object.values(MartialArt).filter(a => a !== MartialArt.NONE).map(art => (
                 <button key={art} onClick={() => handleUpdateMartialArt(art)} className="py-2 px-3 border border-blue-900/30 hover:border-blue-500 text-[9px] font-system text-blue-400 uppercase transition-all hover:bg-blue-500/10">
@@ -218,7 +252,7 @@ const App: React.FC = () => {
                           <p className="text-slate-400 text-[10px] leading-tight mt-1">{drill.description}</p>
                       </div>
                   ))}
-                  {drills.length === 0 && <p className="text-slate-600 text-[10px] uppercase font-system italic animate-pulse text-center py-4">Sincronizando com o Mestre das Sombras...</p>}
+                  {drills.length === 0 && <p className="text-slate-600 text-[10px] uppercase font-system italic animate-pulse text-center py-4">Sincronizando com as sombras...</p>}
               </div>
           </div>
         )}
@@ -229,11 +263,15 @@ const App: React.FC = () => {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
             <div>
               <h1 className="text-4xl font-system font-black text-blue-500 tracking-[0.2em] system-glow">O SISTEMA</h1>
-              <p className="text-slate-400 text-[10px] uppercase font-system mt-2 tracking-widest">HUNTER {userData.rank}-CLASS | NV. {userData.level}</p>
+              <div className="flex items-center gap-3 mt-2">
+                <p className="text-slate-400 text-[10px] uppercase font-system tracking-widest">HUNTER {userData.rank}-CLASS | NV. {userData.level}</p>
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
+                <p className="text-blue-500/60 text-[10px] font-system uppercase">{userData.difficulty}</p>
+              </div>
             </div>
             
             <div className="flex flex-col items-end gap-2">
-              <span className="text-[9px] font-system text-blue-500/60 uppercase tracking-widest">DUNGEON ATUAL</span>
+              <span className="text-[9px] font-system text-blue-500/60 uppercase tracking-widest">ALTERAR DUNGEON</span>
               <div className="flex gap-2 bg-slate-900 p-1 rounded border border-blue-900/30">
                 {Object.values(TrainingLocation).map(loc => (
                   <button 
@@ -256,33 +294,53 @@ const App: React.FC = () => {
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
             <div className="xl:col-span-1">
-                <StatusWindow userData={userData} />
+                <StatusWindow userData={userData} onEditDifficulty={() => setShowDifficultyModal(true)} />
             </div>
             <div className="xl:col-span-2 space-y-6">
                 {loading ? (
                     <div className="p-24 text-center bg-slate-900/40 rounded-lg border border-blue-900/20 flex flex-col items-center justify-center space-y-4">
                       <div className="w-12 h-12 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                      <span className="font-system text-blue-400 text-[10px] animate-pulse">[ SINCRONIZANDO COM A REDE DE CAÇADORES... ]</span>
+                      <span className="font-system text-blue-400 text-[10px] animate-pulse">[ SINCRONIZANDO DADOS DO SISTEMA... ]</span>
                     </div>
                 ) : activeTab === 'QUESTS' ? (
-                    <DailyQuests quests={quests} onComplete={handleCompleteQuest} onRefresh={() => loadMainContent()} isLoading={false} />
+                    <DailyQuests quests={quests} onComplete={handleCompleteQuest} onRefresh={() => loadMainContent(true)} isLoading={false} />
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {healthTips.map((tip, i) => (
                             <div key={i} className="p-5 bg-slate-900/60 backdrop-blur border border-blue-900/30 rounded-lg hover:border-blue-500/50 transition-all group">
                                 <div className="flex justify-between items-center mb-3">
                                   <span className="text-[9px] font-system text-blue-400 uppercase tracking-widest">{tip.category}</span>
-                                  <div className={`w-2 h-2 rounded-full ${tip.importance === 'CRÍTICA' ? 'bg-red-500 animate-ping' : 'bg-blue-500'}`}></div>
+                                  <div className={`w-2 h-2 rounded-full ${tip.importance === 'CRÍTICA' ? 'bg-red-500 animate-ping' : tip.importance === 'ALTA' ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
                                 </div>
                                 <p className="text-sm text-slate-300 italic leading-relaxed">"{tip.content}"</p>
                             </div>
                         ))}
-                        {healthTips.length === 0 && <p className="text-slate-600 font-system text-xs italic">Nenhuma dica disponível no momento.</p>}
                     </div>
                 )}
             </div>
         </div>
       </main>
+
+      {showDifficultyModal && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-sm">
+          <div className="system-bg system-border p-8 rounded-lg max-w-sm w-full space-y-6">
+            <h3 className="text-xl font-system text-blue-400 uppercase tracking-widest text-center">Alterar Dificuldade</h3>
+            <p className="text-[10px] text-slate-500 font-system text-center uppercase">A dificuldade afeta a intensidade das missões geradas pelo sistema.</p>
+            <div className="grid grid-cols-1 gap-2">
+              {Object.values(Difficulty).map(diff => (
+                <button 
+                  key={diff} 
+                  onClick={() => handleUpdateDifficulty(diff)}
+                  className={`p-4 border font-system text-xs uppercase transition-all ${userData.difficulty === diff ? 'bg-blue-600 border-blue-400 text-white' : 'bg-slate-900 border-blue-900/40 text-slate-400 hover:border-blue-500'}`}
+                >
+                  {diff}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setShowDifficultyModal(false)} className="w-full py-2 text-slate-600 font-system text-[10px] uppercase hover:text-white transition-colors">Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {showLevelUp && (
         <LevelUpModal 
