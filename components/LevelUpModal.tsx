@@ -3,16 +3,20 @@ import React, { useEffect, useState } from 'react';
 
 interface Props {
   level: number;
+  type?: 'HUNTER' | 'MARTIAL';
+  name?: string;
   onClose: () => void;
 }
 
-const LevelUpModal: React.FC<Props> = ({ level, onClose }) => {
+const LevelUpModal: React.FC<Props> = ({ level, type = 'HUNTER', name, onClose }) => {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
     setShow(true);
-    const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-3.mp3');
-    audio.play().catch(() => {}); // Silence errors if browser blocks autoplay
+    try {
+      const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-3.mp3');
+      audio.play().catch(() => {});
+    } catch (e) {}
   }, []);
 
   return (
@@ -24,7 +28,9 @@ const LevelUpModal: React.FC<Props> = ({ level, onClose }) => {
         
         <h2 className="text-5xl font-system font-black text-blue-500 system-glow mb-4 animate-bounce">LEVEL UP!</h2>
         <div className="w-px h-12 bg-blue-500 mx-auto mb-4"></div>
-        <p className="text-slate-400 font-system text-xs uppercase mb-1">Nível Atualizado</p>
+        <p className="text-slate-400 font-system text-xs uppercase mb-1">
+            {type === 'MARTIAL' ? `MAESTRIA EM ${name}` : 'NÍVEL DE HUNTER'}
+        </p>
         <p className="text-6xl font-system font-bold text-white mb-8">{level}</p>
         
         <p className="text-blue-200 font-system text-sm mb-12 leading-relaxed">
