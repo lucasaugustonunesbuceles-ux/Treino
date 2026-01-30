@@ -16,8 +16,23 @@ const App: React.FC = () => {
       const saved = localStorage.getItem('solo_leveling_user');
       if (!saved) return null;
       const parsed = JSON.parse(saved);
-      // Validar estrutura básica para não quebrar após atualizações
-      return (parsed && parsed.name && parsed.stats) ? parsed : null;
+      
+      // Validação básica
+      if (!parsed || !parsed.name) return null;
+
+      // MIGRAÇÃO: Garantir que martialProgress existe (Evita o erro "reading 'Nenhuma'")
+      if (!parsed.martialProgress) {
+        const initialMartialProgress: Record<MartialArt, MartialProgress> = {} as any;
+        Object.values(MartialArt).forEach(art => {
+          initialMartialProgress[art] = { level: 1, xp: 0 };
+        });
+        parsed.martialProgress = initialMartialProgress;
+      }
+      if (!parsed.martialArt) {
+        parsed.martialArt = MartialArt.NONE;
+      }
+
+      return parsed as UserData;
     } catch (e) {
       console.warn("[SISTEMA]: Falha ao ler dados de salvamento.", e);
       return null;
@@ -41,10 +56,14 @@ const App: React.FC = () => {
   }, [currentLocation, activeTab, userData?.level]);
 
   useEffect(() => {
+    // Safe check para evitar erro de 'undefined' no loop de efeitos
+    const currentArt = userData?.martialArt || MartialArt.NONE;
+    const artLevel = userData?.martialProgress?.[currentArt]?.level;
+
     if (userData && userData.martialArt !== MartialArt.NONE) {
       loadDojoContent();
     }
-  }, [userData?.martialArt, userData?.martialProgress[userData?.martialArt || MartialArt.NONE]?.level]);
+  }, [userData?.martialArt, userData?.level]); // Simplificado para evitar triggers complexos
 
   const loadMainContent = async () => {
     if (!userData || !currentLocation) return;
@@ -128,7 +147,8 @@ const App: React.FC = () => {
 
       if (updatedUser.martialArt !== MartialArt.NONE) {
         const art = updatedUser.martialArt;
-        const prog = { ...updatedUser.martialProgress[art] };
+        // Safe access
+        const prog = updatedUser.martialProgress?.[art] ? { ...updatedUser.martialProgress[art] } : { level: 1, xp: 0 };
         prog.xp += amount;
         const artXpNext = prog.level * 80;
         if (prog.xp >= artXpNext) {
@@ -171,7 +191,9 @@ const App: React.FC = () => {
     );
   }
 
-  const artProg = userData.martialProgress[userData.martialArt] || { level: 1, xp: 0 };
+  // Safe access para o render principal
+  const currentArt = userData.martialArt || MartialArt.NONE;
+  const artProg = userData.martialProgress?.[currentArt] || { level: 1, xp: 0 };
   const artXpPct = (artProg.xp / (artProg.level * 80)) * 100;
 
   return (
