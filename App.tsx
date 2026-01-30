@@ -1,20 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { UserData, Rank, Quest, UserStats, Difficulty } from './types';
-import { generateDailyQuests, analyzeBodyComposition } from './services/geminiService';
+import { UserData, Rank, Quest, UserStats, Difficulty, TrainingLocation, HealthTip, MartialDrill, MartialArt, MartialProgress } from './types';
+import { generateDailyQuests, generateSurvivalGuide, generateMartialDrills } from './services/geminiService';
 import SystemIntro from './components/SystemIntro';
 import OnboardingForm from './components/OnboardingForm';
 import StatusWindow from './components/StatusWindow';
 import DailyQuests from './components/DailyQuests';
 import LevelUpModal from './components/LevelUpModal';
 
-const INITIAL_STATS: UserStats = {
-  str: 10,
-  agi: 10,
-  vit: 10,
-  int: 10,
-  sen: 10
-};
+type ContentTab = 'QUESTS' | 'SURVIVAL';
 
 const App: React.FC = () => {
   const [userData, setUserData] = useState<UserData | null>(() => {
@@ -22,225 +16,271 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [quests, setQuests] = useState<Quest[]>(() => {
-    const saved = localStorage.getItem('solo_leveling_quests');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const today = new Date().toDateString();
-      if (parsed.date === today) return parsed.quests;
-    }
-    return [];
-  });
-
+  const [activeTab, setActiveTab] = useState<ContentTab>('QUESTS');
+  const [quests, setQuests] = useState<Quest[]>([]);
+  const [healthTips, setHealthTips] = useState<HealthTip[]>([]);
+  const [drills, setDrills] = useState<MartialDrill[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<TrainingLocation | null>(null);
   const [isAwakening, setIsAwakening] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
-  const [loadingQuests, setLoadingQuests] = useState(false);
-  const [systemMessage, setSystemMessage] = useState<string>("");
-  const [showDifficultyModal, setShowDifficultyModal] = useState(false);
+  const [lastLevelUpType, setLastLevelUpType] = useState<'HUNTER' | 'MARTIAL'>('HUNTER');
 
   useEffect(() => {
-    if (userData) {
-      localStorage.setItem('solo_leveling_user', JSON.stringify(userData));
+    if (userData && currentLocation) {
+      loadMainContent();
     }
-  }, [userData]);
+  }, [currentLocation, activeTab]);
 
   useEffect(() => {
-    if (quests.length > 0) {
-      const today = new Date().toDateString();
-      localStorage.setItem('solo_leveling_quests', JSON.stringify({ date: today, quests }));
+    if (userData && userData.martialArt !== MartialArt.NONE) {
+      loadDojoContent();
     }
-  }, [quests]);
+  }, [userData?.martialArt, userData?.martialProgress[userData?.martialArt || MartialArt.NONE]?.level]);
 
-  const handleAwaken = async (data: Partial<UserData>) => {
-    setLoadingQuests(true);
-    const newUser: UserData = {
-      name: data.name || 'Hunter',
-      age: Number(data.age) || 20,
-      height: Number(data.height) || 170,
-      weight: Number(data.weight) || 70,
-      gender: data.gender || 'Masculino',
-      dailyGoal: data.dailyGoal || 'Geral',
-      difficulty: data.difficulty || Difficulty.NORMAL,
-      level: 1,
-      xp: 0,
-      rank: Rank.E,
-      stats: { ...INITIAL_STATS },
-      isAwakened: true
-    };
+  const loadMainContent = async () => {
+    if (!userData || !currentLocation) return;
+    setLoading(true);
+    try {
+      if (activeTab === 'QUESTS') {
+        const q = await generateDailyQuests(userData, currentLocation);
+        setQuests(q);
+      } else {
+        const tips = await generateSurvivalGuide(userData);
+        setHealthTips(tips);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadDojoContent = async () => {
+    if (!userData) return;
+    const d = await generateMartialDrills(userData);
+    setDrills(d);
+  };
+
+  const handleAwaken = (data: Partial<UserData>) => {
+    const initialMartialProgress: Record<MartialArt, MartialProgress> = {} as any;
+    Object.values(MartialArt).forEach(art => {
+      initialMartialProgress[art] = { level: 1, xp: 0 };
+    });
+
+    const newUser = {
+      ...data,
+      level: 1, xp: 0, rank: Rank.E,
+      stats: { str: 10, agi: 10, vit: 10, int: 10, sen: 10 },
+      isAwakened: true,
+      preferredLocation: TrainingLocation.HOME,
+      martialProgress: initialMartialProgress
+    } as UserData;
     
-    // Define o usuário imediatamente para carregar a UI principal
     setUserData(newUser);
     setIsAwakening(false);
-
-    try {
-      // Tenta análise de IA mas não trava o processo
-      analyzeBodyComposition(newUser).then(msg => setSystemMessage(msg));
-      
-      // Carrega as missões (usará fallback se falhar)
-      const daily = await generateDailyQuests(newUser);
-      setQuests(daily);
-    } catch (error) {
-      console.error("Error during awakening setup:", error);
-    } finally {
-      setLoadingQuests(false);
-    }
+    setCurrentLocation(newUser.preferredLocation!);
   };
 
   const handleCompleteQuest = (questId: string) => {
-    setQuests(prev => prev.map(q => {
-      if (q.id === questId && !q.completed) {
-        handleGainXp(q.xpReward, q.type);
-        return { ...q, completed: true };
-      }
-      return q;
-    }));
+    const quest = quests.find(q => q.id === questId);
+    if (!quest || quest.completed) return;
+
+    setQuests(prev => prev.map(q => q.id === questId ? { ...q, completed: true } : q));
+    handleGainXp(quest.xpReward, quest.type);
   };
 
-  const handleGainXp = (amount: number, type: string) => {
+  const handleGainXp = (amount: number, statType: string) => {
     setUserData(prev => {
       if (!prev) return null;
-      let newXp = prev.xp + amount;
-      let newLevel = prev.level;
-      let newStats = { ...prev.stats };
-
-      const statGain = amount / 200; 
-      if (type === 'STR') newStats.str += statGain;
-      if (type === 'AGI') newStats.agi += statGain;
-      if (type === 'VIT') newStats.vit += statGain;
-      newStats.int += 0.1;
-      newStats.sen += 0.1;
-
-      const xpToNext = prev.level * 100;
-      if (newXp >= xpToNext) {
-        newXp -= xpToNext;
-        newLevel += 1;
+      
+      let updatedUser = { ...prev };
+      
+      // 1. Atualizar XP Global de Hunter
+      updatedUser.xp += amount;
+      const xpToNextLevel = updatedUser.level * 100;
+      if (updatedUser.xp >= xpToNextLevel) {
+        updatedUser.xp -= xpToNextLevel;
+        updatedUser.level += 1;
+        setLastLevelUpType('HUNTER');
         setShowLevelUp(true);
       }
 
-      let newRank = prev.rank;
-      const combatPower = (newStats.str + newStats.agi + newStats.vit + newStats.int + newStats.sen) + (newLevel * 5);
-      if (combatPower > 500) newRank = Rank.S;
-      else if (combatPower > 300) newRank = Rank.A;
-      else if (combatPower > 200) newRank = Rank.B;
-      else if (combatPower > 150) newRank = Rank.C;
-      else if (combatPower > 100) newRank = Rank.D;
+      // 2. Atualizar XP da Arte Marcial Ativa
+      if (updatedUser.martialArt !== MartialArt.NONE) {
+        const currentArt = updatedUser.martialArt;
+        const progress = { ...updatedUser.martialProgress[currentArt] };
+        
+        progress.xp += amount; // Ganha a mesma quantidade de XP na arte
+        const artXpToNext = progress.level * 80; // Nível de arte sobe um pouco mais rápido
+        
+        if (progress.xp >= artXpToNext) {
+          progress.xp -= artXpToNext;
+          progress.level += 1;
+          setLastLevelUpType('MARTIAL');
+          setShowLevelUp(true);
+        }
+        
+        updatedUser.martialProgress = {
+          ...updatedUser.martialProgress,
+          [currentArt]: progress
+        };
+      }
 
-      return { ...prev, xp: newXp, level: newLevel, stats: newStats, rank: newRank };
+      // 3. Atualizar Stats
+      const statGain = 0.5;
+      if (statType === 'STR') updatedUser.stats.str += statGain;
+      if (statType === 'AGI') updatedUser.stats.agi += statGain;
+      if (statType === 'VIT') updatedUser.stats.vit += statGain;
+
+      localStorage.setItem('solo_leveling_user', JSON.stringify(updatedUser));
+      return updatedUser;
     });
   };
 
-  const handleResetQuests = async (user = userData) => {
-    if (!user) return;
-    setLoadingQuests(true);
-    try {
-      const daily = await generateDailyQuests(user);
-      setQuests(daily);
-    } finally {
-      setLoadingQuests(false);
-    }
-  };
-
-  const handleChangeDifficulty = async (newDifficulty: Difficulty) => {
+  const updateMartialArt = (art: MartialArt) => {
     if (!userData) return;
-    const updatedUser = { ...userData, difficulty: newDifficulty };
-    setUserData(updatedUser);
-    setShowDifficultyModal(false);
-    setSystemMessage(`[SISTEMA]: DIFICULDADE ATUALIZADA.`);
-    await handleResetQuests(updatedUser);
+    const updated = { ...userData, martialArt: art };
+    setUserData(updated);
+    localStorage.setItem('solo_leveling_user', JSON.stringify(updated));
+    setQuests([]); 
   };
 
   if (!userData) {
-    if (!isAwakening) {
-      return <SystemIntro onStart={() => setIsAwakening(true)} />;
-    }
-    return <OnboardingForm onSubmit={handleAwaken} />;
+    return !isAwakening ? <SystemIntro onStart={() => setIsAwakening(true)} /> : <OnboardingForm onSubmit={handleAwaken} />;
   }
 
-  return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-8 pb-24 overflow-y-auto font-sans">
-      <div className="max-w-6xl mx-auto space-y-8">
-        
-        <header className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-blue-900/50 pb-6">
-          <div className="text-center md:text-left">
-            <div className="flex items-center justify-center md:justify-start gap-3">
-              <h1 className="text-3xl font-system font-bold text-blue-400 tracking-[0.2em] system-glow">
-                O SISTEMA
-              </h1>
-              <button 
-                onClick={() => setShowDifficultyModal(true)}
-                className={`px-2 py-0.5 text-[9px] font-system font-black border rounded uppercase transition-all hover:scale-105 active:scale-95 ${
-                userData.difficulty === Difficulty.HELL ? 'border-red-500 text-red-500 shadow-[0_0_5px_red]' : 
-                userData.difficulty === Difficulty.HARD ? 'border-orange-500 text-orange-500' :
-                'border-blue-500 text-blue-500'
-              }`}>
-                MODO: {userData.difficulty}
+  if (!currentLocation) {
+    return (
+      <div className="fixed inset-0 bg-slate-950 flex items-center justify-center p-6 z-[400]">
+        <div className="system-bg system-border p-8 rounded-lg max-w-lg w-full text-center space-y-10">
+          <h2 className="text-2xl font-system text-blue-400 uppercase tracking-widest system-glow">ONDE VOCÊ IRÁ TREINAR?</h2>
+          <div className="grid grid-cols-1 gap-4">
+            {Object.values(TrainingLocation).map(loc => (
+              <button key={loc} onClick={() => setCurrentLocation(loc)} className="p-4 border border-blue-900/40 hover:border-blue-500 rounded bg-slate-900/50 text-white font-system uppercase text-xs">
+                {loc}
               </button>
-            </div>
-            <p className="text-slate-400 text-sm mt-1 uppercase tracking-widest font-medium">Hunter Rank: Ativo</p>
-          </div>
-          <div className="flex gap-4">
-             <div className="text-right">
-                <span className="text-slate-500 text-[10px] block uppercase tracking-tighter">Nível</span>
-                <span className="text-3xl font-system text-blue-300 font-bold">{userData.level}</span>
-             </div>
-             <div className="w-px h-10 bg-blue-900/50"></div>
-             <div className="text-right">
-                <span className="text-slate-500 text-[10px] block uppercase tracking-tighter">Classe</span>
-                <span className="text-3xl font-system text-white font-bold">{userData.rank}-Rank</span>
-             </div>
-          </div>
-        </header>
-
-        {systemMessage && (
-            <div className="system-bg system-border p-4 rounded-lg animate-pulse border-l-4 border-l-blue-500">
-                <p className="text-blue-200 text-sm font-medium">
-                    <span className="font-bold text-blue-400 mr-2 font-system">[SISTEMA]:</span>
-                    {systemMessage}
-                </p>
-            </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1">
-            <StatusWindow userData={userData} onEditDifficulty={() => setShowDifficultyModal(true)} />
-          </div>
-
-          <div className="lg:col-span-2">
-            <DailyQuests 
-              quests={quests} 
-              onComplete={handleCompleteQuest} 
-              onRefresh={() => handleResetQuests()}
-              isLoading={loadingQuests}
-            />
+            ))}
           </div>
         </div>
       </div>
+    );
+  }
 
-      {showLevelUp && <LevelUpModal level={userData.level} onClose={() => setShowLevelUp(false)} />}
-      
-      {showDifficultyModal && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-md">
-          <div className="system-bg system-border p-8 rounded-lg max-w-sm w-full space-y-6">
-            <h3 className="text-xl font-system font-bold text-blue-400 uppercase tracking-widest text-center">Alterar Dificuldade</h3>
-            <div className="space-y-3">
-              {Object.values(Difficulty).map(d => (
-                <button 
-                  key={d} 
-                  onClick={() => handleChangeDifficulty(d)} 
-                  className={`w-full p-4 border text-left font-system text-xs transition-all hover:bg-blue-600/20 ${userData.difficulty === d ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-900 border-blue-900/40 text-slate-400'}`}
-                >
-                    {d.toUpperCase()}
-                </button>
-              ))}
-            </div>
-            <button 
-              onClick={() => setShowDifficultyModal(false)}
-              className="w-full py-3 text-slate-500 font-system text-[10px] uppercase hover:text-white transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
+  const currentArtProgress = userData.martialProgress[userData.martialArt] || { level: 1, xp: 0 };
+  const artXpPercent = (currentArtProgress.xp / (currentArtProgress.level * 80)) * 100;
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex flex-col md:flex-row font-sans">
+      {/* SIDEBAR ESQUERDA: SHADOW DOJO */}
+      <aside className="w-full md:w-80 bg-slate-900/80 border-r border-blue-900/30 p-6 space-y-8 overflow-y-auto">
+        <div className="border-b border-blue-900/50 pb-4">
+            <h2 className="text-blue-400 font-system text-lg font-bold tracking-widest system-glow">SHADOW DOJO</h2>
+            <p className="text-slate-500 text-[10px] uppercase font-mono tracking-tighter">Maestria em Artes Marciais</p>
         </div>
+
+        <div className="space-y-4">
+            <label className="text-slate-400 text-[10px] uppercase font-system block">Estilo Atual</label>
+            <select 
+                value={userData.martialArt}
+                onChange={(e) => updateMartialArt(e.target.value as MartialArt)}
+                className="w-full bg-slate-950 border border-blue-900/50 p-3 text-white font-system text-[10px] uppercase outline-none focus:border-blue-500"
+            >
+                {Object.values(MartialArt).map(art => <option key={art} value={art}>{art}</option>)}
+            </select>
+        </div>
+
+        {userData.martialArt !== MartialArt.NONE && (
+            <div className="space-y-6">
+                <div className="p-4 bg-blue-900/10 border border-blue-500/20 rounded relative overflow-hidden">
+                    <div className="flex justify-between items-end mb-2">
+                        <span className="text-[10px] font-system text-blue-400 uppercase">Proficiência Técnica</span>
+                        <span className="text-xl font-system text-white font-bold">NV. {currentArtProgress.level}</span>
+                    </div>
+                    <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-400 transition-all duration-500" style={{ width: `${artXpPercent}%` }}></div>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <h3 className="text-white font-system text-xs uppercase border-l-2 border-blue-500 pl-2">Ensino do Sistema</h3>
+                    <div className="space-y-3">
+                        {drills.length === 0 ? (
+                            <div className="p-4 text-center text-[10px] text-slate-500 font-mono animate-pulse">SOLICITANDO DRILS...</div>
+                        ) : drills.map((drill, i) => (
+                            <div key={i} className={`p-3 rounded border ${drill.isPhysical ? 'border-orange-900/30 bg-orange-900/5' : 'border-blue-900/30 bg-blue-900/5'}`}>
+                                <div className="flex justify-between items-start mb-1">
+                                    <span className="text-white font-system text-[9px] uppercase tracking-wide">{drill.title}</span>
+                                    <span className={`text-[7px] px-1 rounded ${drill.isPhysical ? 'bg-orange-900/40 text-orange-400' : 'bg-blue-900/40 text-blue-400'}`}>{drill.isPhysical ? 'CORPO' : 'TÉCNICA'}</span>
+                                </div>
+                                <p className="text-slate-400 text-[10px] leading-tight mb-2">{drill.description}</p>
+                                <span className="text-blue-400 font-mono text-[9px]">{drill.reps}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        )}
+      </aside>
+
+      {/* ÁREA PRINCIPAL */}
+      <main className="flex-1 p-6 md:p-10 space-y-8 overflow-y-auto pb-32">
+        <header className="flex flex-col md:flex-row justify-between items-end gap-4">
+          <div className="w-full md:w-auto">
+            <h1 className="text-4xl font-system font-black text-blue-500 tracking-[0.2em] system-glow">O SISTEMA</h1>
+            <div className="flex gap-4 mt-2">
+                <span className="text-slate-400 text-[10px] uppercase font-system tracking-widest">HUNTER NÍVEL {userData.level}</span>
+                <span className="text-blue-500 text-[10px] uppercase font-system tracking-widest">{currentLocation}</span>
+            </div>
+          </div>
+          
+          <nav className="flex gap-4 bg-slate-900 p-1 rounded border border-blue-900/30">
+            <button onClick={() => setActiveTab('QUESTS')} className={`px-6 py-2 font-system text-[10px] uppercase transition-all ${activeTab === 'QUESTS' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 hover:text-white'}`}>Treinamento</button>
+            <button onClick={() => setActiveTab('SURVIVAL')} className={`px-6 py-2 font-system text-[10px] uppercase transition-all ${activeTab === 'SURVIVAL' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 hover:text-white'}`}>Saúde</button>
+            <button onClick={() => setCurrentLocation(null)} className="px-6 py-2 font-system text-[10px] uppercase text-red-500 hover:bg-red-950/30">Mudar Dungeon</button>
+          </nav>
+        </header>
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+            <div className="xl:col-span-1">
+                <StatusWindow userData={userData} />
+            </div>
+
+            <div className="xl:col-span-2 space-y-6">
+                {loading ? (
+                    <div className="p-20 text-center font-system text-blue-400 animate-pulse">[SISTEMA]: SINCRONIZANDO DADOS DA DUNGEON...</div>
+                ) : activeTab === 'QUESTS' ? (
+                    <DailyQuests 
+                        quests={quests} 
+                        onComplete={handleCompleteQuest} 
+                        onRefresh={() => loadMainContent()} 
+                        isLoading={false} 
+                    />
+                ) : (
+                    <div className="space-y-4">
+                        <div className="border-b border-blue-900/30 pb-2">
+                            <h2 className="text-xl font-system text-white uppercase tracking-widest">Guia de Vitalidade</h2>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {healthTips.map((tip, i) => (
+                                <div key={i} className="p-5 system-bg border border-blue-900/30 rounded-lg group hover:border-blue-500 transition-colors">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <span className="text-[9px] font-system text-blue-400 uppercase tracking-widest">{tip.category}</span>
+                                        <span className={`text-[8px] font-black px-2 py-0.5 rounded ${tip.importance === 'CRÍTICA' ? 'bg-red-900 text-red-100' : 'bg-blue-900 text-blue-100'}`}>{tip.importance}</span>
+                                    </div>
+                                    <p className="text-sm text-slate-300 italic leading-relaxed">"{tip.content}"</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+      </main>
+
+      {showLevelUp && (
+        <LevelUpModal 
+            level={lastLevelUpType === 'HUNTER' ? userData.level : userData.martialProgress[userData.martialArt].level} 
+            onClose={() => setShowLevelUp(false)} 
+        />
       )}
     </div>
   );
